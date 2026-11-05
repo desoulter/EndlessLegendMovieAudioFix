@@ -1,0 +1,10 @@
+*.dll
+*.exe
+*.pdb
+*.mdb
+*.nupkg
+/SHA256SUMS
+/prepared/
+__pycache__/
+*.py[cod]
+.DS_Store
