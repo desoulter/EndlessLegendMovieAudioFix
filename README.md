@@ -1,12 +1,13 @@
-# Endless Legend Movie Audio Fix 2.1.0
+# Endless Legend Movie Audio Fix 2.1.1
 
 Restores movie audio in the native macOS version of Endless Legend with
 **ELCP 2.7.9 for Mac**. The installer accepts only the matching original
 `Assembly-CSharp-firstpass.dll`; other game/ELCP builds are unsupported.
 
-The 2.1 playback mechanism was confirmed working on an Apple M4 Pro with macOS:
-startup logos use standalone FMOD, and the menu trailer uses the game's FMOD.
-Installer and removal tests ran under Mono on Linux using the original Mac assembly.
+Startup logos use standalone FMOD, and later movies use the game's FMOD.
+Version 2.1.1 also tracks volume/mute changes after playback starts: faction
+cutscenes assign their volume after loading, so copying only the initial zero
+volume leaves them silent.
 
 ## Requirements
 
@@ -66,6 +67,18 @@ python3 install.py status
 ```
 
 Use the same `--game` argument for every command if the installation is elsewhere.
+
+## Update from 2.1.0
+
+Close the game, rebuild with `bash build.sh GAME`, then run:
+
+```bash
+python3 install.py upgrade
+```
+
+This replaces only the audio helper and updates the installation record.
+The patched game assembly, its original backup and extracted WAVs are retained.
+`install` also upgrades an existing 2.1.0 installation automatically.
 
 ## Manual installation (without Python)
 
@@ -142,7 +155,7 @@ calls in `Assembly-CSharp-firstpass.dll` to call `ELMovieAudioFix.dll`.
 Unity continues playing the video. The helper maps the movie path to its WAV
 and plays it through the existing FMOD system. For early logos, before the game
 audio system is initialized, it creates a temporary FMOD system. It copies the
-original AudioSource's volume/mute setting and stops/releases the sound when
+original AudioSource's volume/mute setting, follows subsequent changes, and stops/releases the sound when
 the movie ends, is skipped or is unloaded. Failed playback falls back to Unity.
 
 The helper's native imports are bound to the **absolute path** of the installed
@@ -155,8 +168,10 @@ or Steam launch option is required. Moving the game requires reinstallation.
 grep 'EL Movie Audio v2' "$HOME/Library/Logs/Unity/Player.log"
 ```
 
-Expected: `FMOD bridge v2.1 loaded; direct native binding`, followed by
+Expected: `FMOD bridge v2.1.1 loaded; direct native binding`, followed by
 `playing ... via game FMOD` or `playing ... via standalone FMOD`.
+An initial `volume=0` is valid when the game assigns volume later; a subsequent
+`volume updated ...=...` message records the change applied to FMOD.
 
 ## Source and license
 

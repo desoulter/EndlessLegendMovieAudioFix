@@ -119,6 +119,29 @@ class TestPlayback
         Check(test_stops() == 4, "audio EOF cleanup");
         test_finished(0);
 
+        source.mute = false;
+        source.volume = 0;
+        ELMovieAudioFix.Play(source, args[0], owner);
+        ELMovieAudioFix.Tick(owner);
+        Check(test_volume() == 0, "initial zero volume must remain muted until the game changes it");
+        source.volume = 0.35f;
+        ELMovieAudioFix.Tick(owner);
+        Check(Math.Abs(test_volume() - 0.35) < 0.001,
+              "late cutscene volume assignment must reach the already playing FMOD channel");
+        source.volume = 0.6f;
+        ELMovieAudioFix.Tick(owner);
+        Check(Math.Abs(test_volume() - 0.6) < 0.001, "live volume changes");
+        source.mute = true;
+        ELMovieAudioFix.Tick(owner);
+        Check(test_volume() == 0, "live mute");
+        source.volume = 0.2f;
+        ELMovieAudioFix.Tick(owner);
+        Check(test_volume() == 0, "volume changes must respect mute");
+        source.mute = false;
+        ELMovieAudioFix.Tick(owner);
+        Check(Math.Abs(test_volume() - 0.2) < 0.001, "unmute restores the current source volume");
+        ELMovieAudioFix.Stop(owner);
+
         manager.Unready();
         source.mute = false;
         ELMovieAudioFix.Play(source, args[0], owner);
@@ -131,6 +154,6 @@ class TestPlayback
         ELMovieAudioFix.Stop(owner);
         Check(test_systems() == 2 && test_system_releases() == 2,
               "startup without a game audio manager");
-        Console.WriteLine("PASS: native binding, volume, mute, fallback, replay, skip, EOF, startup and cleanup");
+        Console.WriteLine("PASS: native binding, late/live volume, mute, fallback, replay, skip, EOF, startup and cleanup");
     }
 }

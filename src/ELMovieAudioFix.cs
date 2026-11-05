@@ -12,6 +12,8 @@ public static class ELMovieAudioFix
         internal IntPtr System, Sound, Channel;
         internal string Path;
         internal bool OwnSystem;
+        internal object AudioSource;
+        internal float Volume;
     }
 
     private static readonly Dictionary<object, Playback> Playing = new Dictionary<object, Playback>();
@@ -23,7 +25,7 @@ public static class ELMovieAudioFix
 
     static ELMovieAudioFix()
     {
-        Log("FMOD bridge v2.1 loaded; direct native binding; Unity MovieTexture video");
+        Log("FMOD bridge v2.1.1 loaded; direct native binding; live volume tracking; Unity MovieTexture video");
     }
 
     [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
@@ -135,6 +137,24 @@ public static class ELMovieAudioFix
         return null;
     }
 
+    private static float SourceVolume(object audioSource)
+    {
+        object volume = Property(audioSource, "volume");
+        float level = volume == null ? 1.0f : Convert.ToSingle(volume);
+        object mute = Property(audioSource, "mute");
+        return mute != null && Convert.ToBoolean(mute) ? 0.0f : level;
+    }
+
+    private static void UpdateVolume(Playback state)
+    {
+        // CutsceneModalPanel sets volume after LoadMovie has already started audio.
+        float level = SourceVolume(state.AudioSource);
+        if (level == state.Volume) return;
+        Check(FMOD_Channel_SetVolume(state.Channel, level), "update volume");
+        state.Volume = level;
+        Log("volume updated " + System.IO.Path.GetFileName(state.Path) + "=" + level);
+    }
+
     public static void Play(object audioSource, string moviePath, object owner)
     {
         Stop(owner);
@@ -149,6 +169,7 @@ public static class ELMovieAudioFix
                 return;
             }
             state.Path = path;
+            state.AudioSource = audioSource;
             try
             {
                 state.System = ExistingSystem();
@@ -167,15 +188,12 @@ public static class ELMovieAudioFix
             // FMOD_LOOP_OFF | FMOD_2D. All narrated cutscenes are finite.
             Check(FMOD_System_CreateStream(state.System, path, 0x00000009u, IntPtr.Zero, out state.Sound), "create stream");
             Check(FMOD_System_PlaySound(state.System, -1, state.Sound, 1, out state.Channel), "create paused channel");
-            object volume = Property(audioSource, "volume");
-            float level = volume == null ? 1.0f : Convert.ToSingle(volume);
-            object mute = Property(audioSource, "mute");
-            if (mute != null && Convert.ToBoolean(mute)) level = 0;
-            Check(FMOD_Channel_SetVolume(state.Channel, level), "set volume");
+            state.Volume = SourceVolume(audioSource);
+            Check(FMOD_Channel_SetVolume(state.Channel, state.Volume), "set volume");
             Check(FMOD_Channel_SetPaused(state.Channel, 0), "start sound");
             if (state.OwnSystem) Check(FMOD_System_Update(state.System), "update system");
             Playing[owner] = state;
-            Log("playing " + System.IO.Path.GetFileName(moviePath) + " via " + (state.OwnSystem ? "standalone" : "game") + " FMOD, volume=" + level);
+            Log("playing " + System.IO.Path.GetFileName(moviePath) + " via " + (state.OwnSystem ? "standalone" : "game") + " FMOD, volume=" + state.Volume);
         }
         catch (Exception error)
         {
@@ -214,7 +232,12 @@ public static class ELMovieAudioFix
             }
             object texture = Field(owner, "movieTexture");
             object running = Property(texture, "isPlaying");
-            if (running != null && !Convert.ToBoolean(running)) Stop(owner);
+            if (running != null && !Convert.ToBoolean(running))
+            {
+                Stop(owner);
+                return;
+            }
+            UpdateVolume(state);
         }
         catch (Exception error)
         {

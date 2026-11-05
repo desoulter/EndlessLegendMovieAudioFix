@@ -19,6 +19,7 @@ MOVIES = "EndlessLegend.app/Contents/Resources/Data/StreamingAssets/Movies"
 ASSEMBLY = MANAGED + "/Assembly-CSharp-firstpass.dll"
 HELPER = MANAGED + "/ELMovieAudioFix.dll"
 STATE = "MovieAudioFix"
+VERSION = "2.1.1"
 ORIGINAL_SHA256 = "ed19f8e0c6f5b7e0786f240af4b322b85498a5db112e99a8b31ac108bacef397"
 
 
@@ -55,6 +56,13 @@ def tool(name):
         if candidate.is_file():
             return candidate
     raise PatchError("Required tool not found: " + name + ". See README.md.")
+
+
+def patch_tools():
+    for name in ["MovieAudioPatcher.exe", "ELMovieAudioFix.template.dll", "Mono.Cecil.dll"]:
+        if not (PACKAGE / "tools" / name).is_file():
+            raise PatchError("Build tools are missing. Run bash build.sh with your game directory first.")
+    return tool("mono"), PACKAGE / "tools/MovieAudioPatcher.exe"
 
 
 def require_closed_game():
@@ -161,7 +169,10 @@ def extract_audio(game, output):
 def install(game):
     require_closed_game()
     if (game / STATE / "manifest.json").is_file():
-        status(game)
+        if read_manifest(game)["version"] != VERSION:
+            upgrade(game)
+        else:
+            status(game)
         return
     if (game / STATE).exists():
         raise PatchError("MovieAudioFix already exists. Remove any earlier patch before installing.")
@@ -169,11 +180,7 @@ def install(game):
         raise PatchError("Unsupported game assembly. This release requires ELCP 2.7.9 for macOS.")
     if (game / HELPER).exists() or (game / (HELPER + ".config")).exists():
         raise PatchError("An earlier audio helper exists. Remove it before installing.")
-    mono = tool("mono")
-    patcher = PACKAGE / "tools/MovieAudioPatcher.exe"
-    for name in ["MovieAudioPatcher.exe", "ELMovieAudioFix.template.dll", "Mono.Cecil.dll"]:
-        if not (PACKAGE / "tools" / name).is_file():
-            raise PatchError("Build tools are missing. Run bash build.sh with your game directory first.")
+    mono, patcher = patch_tools()
     # All preparation happens outside live game files, including audio decoding.
     with tempfile.TemporaryDirectory(prefix="el-movie-audio-", dir=str(game)) as temporary:
         prepared = Path(temporary) / "prepared"
@@ -212,6 +219,44 @@ def install(game):
     print("Launch normally through Steam; leave Steam launch options empty.")
 
 
+def upgrade(game):
+    require_closed_game()
+    status(game)
+    data = read_manifest(game)
+    if data["version"] == VERSION:
+        print("Already up to date.")
+        return
+    if data["version"] != "2.1.0":
+        raise PatchError("This upgrade supports community version 2.1.0 only.")
+    mono, patcher = patch_tools()
+    state = game / STATE
+    helper = game / HELPER
+    manifest = state / "manifest.json"
+    installed_script = state / "install.py"
+    with tempfile.TemporaryDirectory(prefix="upgrade-", dir=str(state)) as temporary:
+        work = Path(temporary)
+        for path in [helper, manifest, installed_script]:
+            shutil.copy2(path, work / (path.name + ".backup"))
+        updated_helper = work / "ELMovieAudioFix.dll"
+        print(run([mono, patcher, "bind", game, updated_helper]).strip())
+        for entry in data["files"]:
+            if entry["path"] == HELPER:
+                entry["sha256"] = checksum(updated_helper)
+        data["version"] = VERSION
+        updated_manifest = work / "manifest.json"
+        updated_manifest.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        try:
+            atomic_copy(updated_helper, helper)
+            atomic_copy(updated_manifest, manifest)
+            atomic_copy(PACKAGE / "install.py", installed_script)
+        except Exception:
+            for path in [helper, manifest, installed_script]:
+                atomic_copy(work / (path.name + ".backup"), path)
+            raise
+    print("Updated audio helper to " + VERSION + "; game assembly and WAV files were preserved.")
+    status(game)
+
+
 def uninstall(game):
     require_closed_game()
     if not (game / STATE).exists():
@@ -245,13 +290,13 @@ def uninstall(game):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["install", "status", "uninstall"])
+    parser.add_argument("action", choices=["install", "upgrade", "status", "uninstall"])
     parser.add_argument("--game", type=Path, default=DEFAULT_GAME,
                         help="Endless Legend installation directory")
     arguments = parser.parse_args()
     game = arguments.game.expanduser().resolve()
     try:
-        {"install": install, "status": status, "uninstall": uninstall}[arguments.action](game)
+        {"install": install, "upgrade": upgrade, "status": status, "uninstall": uninstall}[arguments.action](game)
         return 0
     except (PatchError, OSError, ValueError, KeyError, TypeError) as error:
         print("Error: " + str(error), file=sys.stderr)
