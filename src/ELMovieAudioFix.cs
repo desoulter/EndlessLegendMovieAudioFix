@@ -25,7 +25,7 @@ public static class ELMovieAudioFix
 
     static ELMovieAudioFix()
     {
-        Log("FMOD bridge v2.1.1 loaded; direct native binding; live volume tracking; Unity MovieTexture video");
+        Log("FMOD bridge v1.0.0 loaded; direct native binding; live volume tracking; Unity MovieTexture video");
     }
 
     [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
@@ -76,7 +76,7 @@ public static class ELMovieAudioFix
 
     private static void Log(string message)
     {
-        message = "[EL Movie Audio v2] " + message;
+        message = "[EL Movie Audio Fix] " + message;
         try
         {
             foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())

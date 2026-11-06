@@ -61,6 +61,7 @@ class InstallationTests(unittest.TestCase):
     def test_install_status_repeat_and_uninstall(self):
         self.install()
         data = installer.read_manifest(self.game)
+        self.assertEqual(data["version"], installer.VERSION)
         audio = [entry for entry in data["files"] if entry["path"].endswith(".audio.wav")]
         self.assertEqual(len(audio), 1)
         self.assertEqual(data["native_library"], str(self.game / "libfmodex.dylib"))
@@ -129,48 +130,15 @@ class InstallationTests(unittest.TestCase):
             self.install()
         self.assertEqual(changed, self.snapshot())
 
-    def mark_previous_version(self):
-        helper = self.game / installer.HELPER
-        helper.write_bytes(helper.read_bytes() + b"previous build")
+    def test_install_rejects_conflicting_manifest_without_changes(self):
+        self.install()
         data = installer.read_manifest(self.game)
-        data["version"] = "2.1.0"
-        for entry in data["files"]:
-            if entry["path"] == installer.HELPER:
-                entry["sha256"] = installer.checksum(helper)
+        data["version"] = "unsupported-build"
         (self.game / installer.STATE / "manifest.json").write_text(json.dumps(data))
-
-    def test_helper_upgrade_preserves_game_assembly_and_audio(self):
-        self.install()
-        self.mark_previous_version()
-        before = self.snapshot()
-        installer.upgrade(self.game)
-        self.assertEqual(installer.read_manifest(self.game)["version"], "2.1.1")
-        for relative, digest in before.items():
-            if relative == installer.ASSEMBLY or relative.endswith(".audio.wav"):
-                self.assertEqual(digest, installer.checksum(self.game / relative))
-        upgraded = self.snapshot()
-        installer.upgrade(self.game)
-        self.assertEqual(upgraded, self.snapshot())
-        installer.uninstall(self.game)
-        self.assertEqual(self.original_files, self.snapshot())
-
-    def test_failed_upgrade_restores_helper_and_manifest(self):
-        self.install()
-        self.mark_previous_version()
-        before = self.snapshot()
-        original_copy = installer.atomic_copy
-        failed = [False]
-
-        def fail_manifest_once(source, destination):
-            if destination == self.game / installer.STATE / "manifest.json" and not failed[0]:
-                failed[0] = True
-                raise OSError("Simulated upgrade commit failure")
-            return original_copy(source, destination)
-
-        with mock.patch.object(installer, "atomic_copy", side_effect=fail_manifest_once):
-            with self.assertRaises(OSError):
-                installer.upgrade(self.game)
-        self.assertEqual(before, self.snapshot())
+        changed = self.snapshot()
+        with self.assertRaises(installer.PatchError):
+            self.install()
+        self.assertEqual(changed, self.snapshot())
 
     def test_native_playback_without_dllmap(self):
         library = self.game / "libfmodex.dylib"

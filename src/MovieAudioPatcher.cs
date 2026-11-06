@@ -8,7 +8,7 @@ using Mono.Cecil.Cil;
 
 public static class MovieAudioPatcher
 {
-    private const string Version = "2.1.1";
+    private const string Version = "1.0.0";
     private const string OriginalHash = "ed19f8e0c6f5b7e0786f240af4b322b85498a5db112e99a8b31ac108bacef397";
     private const string Managed = "EndlessLegend.app/Contents/Resources/Data/Managed/";
     private const string Movies = "EndlessLegend.app/Contents/Resources/Data/StreamingAssets/Movies/";
@@ -33,7 +33,7 @@ public static class MovieAudioPatcher
             throw new FileNotFoundException("Game FMOD library not found.");
         if (Directory.Exists(Path.Combine(game, "MovieAudioFix")) ||
             File.Exists(Path.Combine(game, AudioHelper)) || File.Exists(Path.Combine(game, AudioHelper + ".config")))
-            throw new InvalidOperationException("Remove any earlier movie audio fix before installing.");
+            throw new InvalidOperationException("Movie audio fix files already exist. Remove the existing installation before installing.");
     }
 
     private static void BindHelper(string template, string library, string output)
@@ -127,9 +127,9 @@ public static class MovieAudioPatcher
 
     public static int Main(string[] args)
     {
-        if (args.Length != 3 || (args[0] != "prepare" && args[0] != "manifest" && args[0] != "bind"))
+        if (args.Length != 3 || (args[0] != "prepare" && args[0] != "manifest"))
         {
-            Console.Error.WriteLine("Usage: mono MovieAudioPatcher.exe prepare|manifest|bind GAME OUTPUT");
+            Console.Error.WriteLine("Usage: mono MovieAudioPatcher.exe prepare|manifest GAME OUTPUT");
             return 2;
         }
         try
@@ -137,16 +137,7 @@ public static class MovieAudioPatcher
             string game = Path.GetFullPath(args[1]).TrimEnd(Path.DirectorySeparatorChar);
             string output = Path.GetFullPath(args[2]).TrimEnd(Path.DirectorySeparatorChar);
             if (args[0] == "prepare") Prepare(game, output);
-            else if (args[0] == "manifest") WriteManifest(game, output);
-            else
-            {
-                string library = Path.Combine(game, "libfmodex.dylib");
-                if (!File.Exists(library)) throw new FileNotFoundException("Game FMOD library not found.");
-                if (File.Exists(output)) throw new InvalidOperationException("Output file already exists.");
-                BindHelper(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ELMovieAudioFix.template.dll"),
-                           library, output);
-                Console.WriteLine("Bound audio helper to " + library);
-            }
+            else WriteManifest(game, output);
             return 0;
         }
         catch (Exception error)
@@ -248,7 +239,7 @@ public static class MovieAudioPatcher
         TypeDefinition bootIterator = null;
         foreach (TypeDefinition type in boot.NestedTypes) if (type.Name.StartsWith("<Play>")) bootIterator = type;
         if (bootIterator == null) throw new InvalidOperationException("Missing startup movie coroutine");
-        FieldDefinition savedPath = new FieldDefinition("elMovieAudioPathV2", FieldAttributes.Assembly, module.TypeSystem.String);
+        FieldDefinition savedPath = new FieldDefinition("elMovieAudioPath", FieldAttributes.Assembly, module.TypeSystem.String);
         boot.Fields.Add(savedPath);
         FieldDefinition bootOwner = Field(bootIterator, "<>f__this");
         FieldDefinition bootPath = Field(bootIterator, "<moviePath>__7");

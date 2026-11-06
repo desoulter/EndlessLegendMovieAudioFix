@@ -1,89 +1,108 @@
-# Endless Legend Movie Audio Fix 2.1.1
+# Endless Legend Movie Audio Fix
 
-Restores movie audio in the native macOS version of Endless Legend with
-**ELCP 2.7.9 for Mac**. The installer accepts only the matching original
-`Assembly-CSharp-firstpass.dll`; other game/ELCP builds are unsupported.
+**Version 1.0.0** · [Changelog](CHANGELOG.md) · [MIT license](LICENSE)
 
-Startup logos use standalone FMOD, and later movies use the game's FMOD.
-Version 2.1.1 also tracks volume/mute changes after playback starts: faction
-cutscenes assign their volume after loading, so copying only the initial zero
-volume leaves them silent.
+Restores missing movie audio in the **macOS version of Endless Legend with
+ELCP 2.7.9**: startup logos, the main intro and faction cutscenes.
+
+The fix keeps Unity's video playback and plays locally extracted audio through
+the game's FMOD library. It follows volume and mute changes, including the late
+volume assignment that otherwise leaves faction intros silent.
+
+The fix requires the original ELCP 2.7.9 `Assembly-CSharp-firstpass.dll`, without additional changes to that assembly. Other mods that replace the same file may conflict.
 
 ## Requirements
 
-- An unmodified ELCP 2.7.9 Mac installation. Uninstall earlier movie audio fixes first.
-- Python 3.8+ for automatic installation/removal.
-- Mono (including `mcs`) and FFmpeg (`ffmpeg` and `ffprobe`) for building/installing.
-- Approximately 150 MiB for extracted audio, plus temporary installation space.
+- An installed copy of Endless Legend with **ELCP 2.7.9 for Mac**.
+- **Python 3.8+** for the automatic installer and uninstaller.
+- **Mono** to run the patching tool during installation.
+- **FFmpeg**, including `ffmpeg` and `ffprobe`, to extract movie audio.
+- Approximately **150 MiB** for extracted audio, plus temporary installation space.
+- **Mono's** `mcs` **compiler** to build the patching tools.
 
-If an older uninstaller leaves a `MovieAudioFix` directory, move it out of the
-game directory after uninstalling the old patch.
-
-If using [Homebrew](https://brew.sh/):
+For [Homebrew](https://brew.sh/) users:
 
 ```bash
 brew install python mono ffmpeg
 ```
 
-This source package contains no compiled binaries. Build the tools before
-installing. No game binaries, audio, FMOD libraries or Unity libraries are distributed.
+Audio is extracted from your own game installation. This project distributes no
+game binaries, game audio, Unity libraries or FMOD libraries.
 
-## Build
+## Install
 
-Open Terminal in the cloned/extracted repository and run:
+1. Close Endless Legend.
+2. Clone this repository or download its source code from GitHub.
+3. Open Terminal in the repository folder, build the tools and install:
+   ```bash
+    bash build.sh "$HOME/Library/Application Support/Steam/steamapps/common/Endless Legend"
+    python3 install.py install
+   ```
 
-```bash
-bash build.sh "$HOME/Library/Application Support/Steam/steamapps/common/Endless Legend"
-```
-
-Use your actual game directory if it is installed elsewhere. The script downloads
-**Mono.Cecil 0.11.6** from [NuGet](https://www.nuget.org/packages/Mono.Cecil/0.11.6),
-extracts `lib/net40/Mono.Cecil.dll`, checks its pinned SHA-256 and compiles the
-helper and patcher. A cached matching DLL is reused; later builds work offline.
-Building prepares tools only and does not modify the game. Installation downloads nothing.
-
-Generated files in `tools/` (`*.dll`, `*.exe`) and `SHA256SUMS` are ignored by Git.
-Keep `tools/extract_audio.sh` in the repository. Mono.Cecil is a build/install-time
-dependency of the patcher; the in-game helper does not reference it.
-
-## Automatic installation
-
-Close the game. Extract this archive, open Terminal in its folder, and run:
-
-```bash
-python3 install.py install
-```
-
-For a non-default Steam library:
-
-```bash
-python3 install.py install --game "/path/to/Endless Legend"
-```
-
-Launch with Steam's normal Play button and empty launch options.
+Launch the game normally through Steam with empty launch options. Check the
+installation with:
 
 ```bash
 python3 install.py status
 ```
 
-Use the same `--game` argument for every command if the installation is elsewhere.
-
-## Update from 2.1.0
-
-Close the game, rebuild with `bash build.sh GAME`, then run:
+The default game directory is
+`~/Library/Application Support/Steam/steamapps/common/Endless Legend`.
+For another Steam library, supply the directory containing `EndlessLegend.app`
+and `libfmodex.dylib`:
 
 ```bash
-python3 install.py upgrade
+bash build.sh "/path/to/Endless Legend"
+python3 install.py install --game "/path/to/Endless Legend"
+python3 install.py status --game "/path/to/Endless Legend"
 ```
 
-This replaces only the audio helper and updates the installation record.
-The patched game assembly, its original backup and extracted WAVs are retained.
-`install` also upgrades an existing 2.1.0 installation automatically.
+Use the same `--game` argument for removal and other commands.
 
-## Manual installation (without Python)
+The installer prepares and checks files before replacing the game assembly,
+saves its original copy in `MovieAudioFix/backup`, and records installed-file
+checksums. Keep that backup until the fix has been removed. Running `install`
+again checks an existing installation.
 
-Close the game. Open Terminal in this package's folder. Set `GAME` to the
-directory containing `EndlessLegend.app` and `libfmodex.dylib`:
+## Uninstall
+
+Close the game and run:
+
+```bash
+python3 install.py uninstall
+```
+
+If you no longer have the downloaded package, use the copy saved with the game:
+
+```bash
+python3 "$HOME/Library/Application Support/Steam/steamapps/common/Endless Legend/MovieAudioFix/install.py" uninstall
+```
+
+Removal requires only Python. It restores the original ELCP assembly and removes
+the helper and generated WAV files. Files changed since installation are reported
+instead of overwritten.
+
+Uninstall before updating ELCP, verifying Steam files or moving the game to a
+different directory. Reinstall afterwards if the game assembly is still supported.
+The helper is bound to the absolute path of the game's FMOD library, so moving an
+installed game requires reinstallation.
+
+## Build details
+
+`build.sh` reads the game's `mscorlib.dll` to target its .NET 2.0 runtime.
+Building prepares the tools without modifying the game.
+
+The build downloads **Mono.Cecil 0.11.6** from NuGet, extracts
+`lib/net40/Mono.Cecil.dll` and checks its pinned SHA-256. A matching cached DLL is
+reused, allowing subsequent builds offline. Installation itself downloads nothing.
+
+Generated `tools/*.dll`, `tools/*.exe` and `SHA256SUMS` are ignored by Git.
+Mono.Cecil is used only by the patching tool; it is not an in-game dependency.
+
+## Manual installation
+
+This method does not require Python. Build the tools with `bash build.sh GAME`
+first, then close the game and open Terminal in the repository folder.
 
 ```bash
 GAME="$HOME/Library/Application Support/Steam/steamapps/common/Endless Legend"
@@ -95,89 +114,108 @@ bash tools/extract_audio.sh "$GAME" "$WORK"
 mono tools/MovieAudioPatcher.exe manifest "$GAME" "$WORK"
 ```
 
-Run each command only after the previous one succeeds. `WORK` must be a new
-directory. These steps prepare files without modifying the game.
+Adjust `GAME` if needed. Run each command only after the previous command succeeds.
+`WORK` must be a new directory. These commands prepare files without modifying
+the game.
 
-Copy the backup/manifest first, then merge the prepared files into the game:
+Copy the backup and installation record first, then merge the prepared files:
 
 ```bash
 ditto "$WORK/MovieAudioFix" "$GAME/MovieAudioFix"
 ditto "$WORK/files" "$GAME"
 ```
 
-Do not replace the entire app bundle in Finder. The commands merge individual
-files. Keep `MovieAudioFix/backup` until the patch has been uninstalled.
-The prepared files contain audio and a modified assembly from your game;
-share this original package rather than the `prepared` directory.
+The commands merge individual files. Do not replace the whole app bundle in
+Finder. The `prepared` directory contains files derived from your game; distribute
+the original release package instead.
 
-## Automatic removal
+### Manual removal
 
-Close the game and run either command:
-
-```bash
-python3 install.py uninstall
-```
-
-Or, if the downloaded package is no longer available:
-
-```bash
-python3 "$HOME/Library/Application Support/Steam/steamapps/common/Endless Legend/MovieAudioFix/install.py" uninstall
-```
-
-This also works after a manual installation. Removal needs only Python 3.
-It restores the original assembly and removes the helper and generated WAVs.
-Changed files are reported rather than overwritten. Uninstall before updating
-ELCP, verifying Steam files, or moving the game; reinstall afterwards if the
-game assembly is still the supported version.
-
-## Manual removal
-
-Close the game. All paths below are relative to the game directory.
+Close the game. Paths below are relative to the game directory.
 
 1. Copy `MovieAudioFix/backup/Assembly-CSharp-firstpass.dll` to
+
    `EndlessLegend.app/Contents/Resources/Data/Managed/Assembly-CSharp-firstpass.dll`,
-   replacing the patched file.
+    replacing the patched file.
 2. Delete `EndlessLegend.app/Contents/Resources/Data/Managed/ELMovieAudioFix.dll`.
 3. Delete the `.bik.audio.wav` files listed in `MovieAudioFix/manifest.json`.
+
    Keep the original `.bik` and `.ogv` files.
-4. Delete the `MovieAudioFix` directory after restoring the original assembly.
+4. Delete `MovieAudioFix` after restoring the original assembly.
+
+The automatic uninstaller also works after a manual installation.
+
+## Troubleshooting
+
+| Message or symptom | Action |
+| --- | --- |
+| `Unsupported game assembly` | Install ELCP 2.7.9 for Mac and remove changes to its firstpass assembly. Other builds are rejected deliberately. |
+| `Build tools are missing` | Run `bash build.sh GAME` in your source checkout. |
+| `Required tool not found` | Install the named dependency and retry. |
+| `Missing or changed installed file` | Check for a game update, Steam verification or another mod replacing installed files. Use the removal instructions before reinstalling. |
+| `Game location changed` | Uninstall and reinstall at the new location. |
+| Movies are still silent | Check the installation status and the Unity log below. |
+
+```bash
+python3 install.py --version
+python3 install.py status
+grep 'EL Movie Audio Fix' "$HOME/Library/Logs/Unity/Player.log"
+```
+
+The log should contain `FMOD bridge v1.0.0 loaded`, then
+`playing ... via game FMOD` or `playing ... via standalone FMOD`.
+An initial `volume=0` can be normal: `volume updated ...` records a later volume
+change from the game.
+
+For a bug report, include your macOS version, Mac processor, ELCP version,
+installer output and relevant log lines. Mention whether the problem affects
+startup logos, the main intro or a particular faction cutscene.
 
 ## How it works
 
-The Mac game uses Unity `MovieTexture` to display `.ogv` movies. Its Mac cutscene
+The Mac game displays `.ogv` movies using Unity `MovieTexture`. Its Mac cutscene
 panel disables the Bink component, so replacing the Bink playback library does
-not affect this path.
+not repair this playback path.
 
-The installer extracts the first audio stream from each voiced `.bik` movie
-into a signed 16-bit PCM WAV alongside that movie. It patches three audio-start
-calls in `Assembly-CSharp-firstpass.dll` to call `ELMovieAudioFix.dll`.
+The installer extracts the first audio stream from each voiced `.bik` movie to
+a signed 16-bit PCM WAV next to the original movie. It patches three audio-start
+calls in `Assembly-CSharp-firstpass.dll` to use `ELMovieAudioFix.dll`.
 
-Unity continues playing the video. The helper maps the movie path to its WAV
-and plays it through the existing FMOD system. For early logos, before the game
-audio system is initialized, it creates a temporary FMOD system. It copies the
-original AudioSource's volume/mute setting, follows subsequent changes, and stops/releases the sound when
-the movie ends, is skipped or is unloaded. Failed playback falls back to Unity.
+Unity continues playing the video. The helper locates the matching WAV and uses
+the game's FMOD system for audio. Before the audio manager is ready, it creates a
+temporary FMOD system for startup movies. It follows the Unity AudioSource's
+volume and mute settings and releases the sound when the movie ends, is skipped
+or is unloaded. If audio startup fails, it falls back to Unity's original audio
+call.
 
-The helper's native imports are bound to the **absolute path** of the installed
-game's `libfmodex.dylib`. No `dllmap`, native-library replacement, launch wrapper
-or Steam launch option is required. Moving the game requires reinstallation.
+Native imports are bound directly to the installed game's `libfmodex.dylib`.
+No `dllmap`, native-library replacement or launch wrapper is needed.
 
-## Diagnostics
+## Development
+
+The integration suite uses temporary game copies and synthetic video/audio
+fixtures. Supply a directory containing the original ELCP 2.7.9 Mac
+`Assembly-CSharp-firstpass.dll`, `UnityEngine.dll` and `mscorlib.dll`:
 
 ```bash
-grep 'EL Movie Audio v2' "$HOME/Library/Logs/Unity/Player.log"
+bash build.sh "/path/to/Endless Legend"
+EL_MOVIE_TEST_MANAGED="/path/to/original/Managed" python3 -m unittest discover -s tests -v
 ```
 
-Expected: `FMOD bridge v2.1.1 loaded; direct native binding`, followed by
-`playing ... via game FMOD` or `playing ... via standalone FMOD`.
-An initial `volume=0` is valid when the game assigns volume later; a subsequent
-`volume updated ...=...` message records the change applied to FMOD.
+The suite checks installation, removal, rollback, installation conflict handling,
+native binding, late volume changes, mute and resource cleanup. It uses a fake
+FMOD library for playback checks; listening and video/audio timing must be
+checked in the game.
 
-## Source and license
+Release notes are in [CHANGELOG.md](CHANGELOG.md).
 
-Source is in `src/`. The helper targets the game's .NET 2.0 core library. The patching tool uses
-[Mono.Cecil 0.11.6](https://www.nuget.org/packages/Mono.Cecil/0.11.6).
-After a build, `SHA256SUMS` contains checksums of the generated/downloaded binaries.
+## License and credits
 
-Project code: MIT, see `LICENSE`. Mono.Cecil: MIT, see `licenses/Mono.Cecil.txt`.
-This is an unofficial patch and is not affiliated with Amplitude or SEGA.
+Project code is licensed under the [MIT license](LICENSE).
+[Mono.Cecil 0.11.6](https://www.nuget.org/packages/Mono.Cecil/0.11.6) is also
+MIT-licensed; its notice is included in [licenses/Mono.Cecil.txt](licenses/Mono.Cecil.txt).
+FFmpeg and Mono are separate prerequisites and are not bundled.
+
+This is an unofficial community fix, not affiliated with or endorsed by
+Amplitude Studios or SEGA. Endless Legend and its game assets belong to their
+respective owners.
